@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
