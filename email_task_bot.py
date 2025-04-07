@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
@@ -126,6 +126,7 @@ def ai_plan_and_solve(tasks):
         try:
             print(f"[{datetime.now()}] Gửi yêu cầu tới OpenRouter: {url}")
             print(f"[{datetime.now()}] Đầu đề: {headers}")
+            print(f"[{datetime.now()}] Dữ liệu gửi: {data}")
             response = requests.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
             plan = response.json()["choices"][0]["message"]["content"]
