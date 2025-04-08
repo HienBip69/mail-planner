@@ -89,16 +89,15 @@ def analyze_email(subject, body):
             return None
     return task if task["deadline"] else None
 
-# Gọi Groq AI API với retry
+# Gọi Groq AI API với yêu cầu trả về tiếng Việt
 def ai_plan_and_solve(tasks):
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    url = "https://api.groq.com/openai/v1/chat/completions"  # Endpoint của Groq
+    url = "https://api.groq.com/openai/v1/chat/completions"
     planned_tasks = []
 
-    # Kiểm tra key trước khi gửi yêu cầu
     if not GROQ_API_KEY or not GROQ_API_KEY.startswith("gsk_"):
         print(f"[{datetime.now()}] Lỗi: Khóa API Groq không hợp lệ hoặc chưa được cấu hình.")
         message_queue.put("Lỗi: Khóa API Groq không hợp lệ. Bot vẫn chạy nhưng không lập kế hoạch.")
@@ -119,20 +118,21 @@ def ai_plan_and_solve(tasks):
         deadline_date = datetime.strptime(task["deadline"], "%d-%m-%Y")
         days_until_deadline = max((deadline_date - datetime.now()).days, 1)
 
+        # Prompt yêu cầu trả về tiếng Việt
         prompt = (
-            f"Tạo kế hoạch chi tiết cho nhiệm vụ này:\n"
+            f"Tạo kế hoạch chi tiết cho nhiệm vụ này bằng tiếng Việt:\n"
             f"Tiêu đề: {task['title']}\n"
             f"Mô tả: {task['description']}\n"
             f"Hạn chót: {task['deadline']} (định dạng DD-MM-YYYY)\n"
             f"Ước lượng tổng thời gian hoàn thành (giờ) và lập kế hoạch chi tiết phân bổ công việc cụ thể cho từng ngày trong {days_until_deadline} ngày. "
-            f"Trả về định dạng:\n"
+            f"Trả về định dạng bằng tiếng Việt:\n"
             f"- Tổng thời gian: X giờ\n"
             f"- Ngày 1: Y giờ - Công việc cụ thể\n"
             f"- Ngày 2: Z giờ - Công việc cụ thể\n"
             f"(và tiếp tục cho đến hết số ngày)"
         )
         data = {
-            "model": "llama3-70b-8192",  # Model hợp lệ của Groq
+            "model": "llama3-70b-8192",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 512,
             "temperature": 0.7
