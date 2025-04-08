@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
@@ -89,7 +89,7 @@ def analyze_email(subject, body):
             return None
     return task if task["deadline"] else None
 
-# Gọi OpenRouter API và lập kế hoạch chi tiết
+# Gọi OpenRouter API với retry
 def ai_plan_and_solve(tasks):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -131,49 +131,62 @@ def ai_plan_and_solve(tasks):
             f"(và tiếp tục cho đến hết số ngày)"
         )
         data = {
-            "model": "mistralai/mixtral-8x7b-instruct:free",
+            "model": "deepseek/deepseek-v3-base:free",  # Model mới
             "messages": [{"role": "user", "content": prompt}]
         }
-        try:
-            print(f"[{datetime.now()}] Gửi yêu cầu tới OpenRouter: {url}")
-            print(f"[{datetime.now()}] Đầu đề: {headers}")
-            print(f"[{datetime.now()}] Dữ liệu gửi: {data}")
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            plan = response.json()["choices"][0]["message"]["content"]
-            print(f"[{datetime.now()}] Nhận phản hồi: {plan[:50]}...")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"[{datetime.now()}] Gửi yêu cầu tới OpenRouter: {url} (Lần thử {attempt + 1}/{max_retries})")
+                print(f"[{datetime.now()}] Đầu đề: {headers}")
+                print(f"[{datetime.now()}] Dữ liệu gửi: {data}")
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                plan = response.json()["choices"][0]["message"]["content"]
+                print(f"[{datetime.now()}] Nhận phản hồi: {plan[:50]}...")
+                print(f"[{datetime.now()}] Phản hồi đầy đủ: {plan}")
 
-            total_hours = extract_total_hours(plan) or 8
-            hours_per_day = total_hours / days_until_deadline
+                total_hours = extract_total_hours(plan) or 8
+                hours_per_day = total_hours / days_until_deadline
 
-            planned_task = {
-                "title": task["title"],
-                "deadline": task["deadline"],
-                "description": task["description"],
-                "total_hours": total_hours,
-                "hours_per_day": round(hours_per_day, 2),
-                "days": days_until_deadline,
-                "plan": plan,
-                "sender": task["sender"]
-            }
-            planned_tasks.append(planned_task)
-            add_task_to_calendar(planned_task)
-        except requests.exceptions.HTTPError as e:
-            print(f"[{datetime.now()}] Lỗi HTTP khi gọi OpenRouter: {str(e)}")
-            message_queue.put(f"Lỗi: {str(e)}. Bot vẫn chạy nhưng không lập kế hoạch chi tiết.")
-            planned_tasks.append({
-                "title": task["title"],
-                "deadline": task["deadline"],
-                "description": task["description"],
-                "total_hours": 8,
-                "hours_per_day": 8,
-                "days": 1,
-                "plan": "Không thể lập kế hoạch do lỗi API.",
-                "sender": task["sender"]
-            })
-        except Exception as e:
-            print(f"[{datetime.now()}] Lỗi khác: {str(e)}")
-            message_queue.put(f"Lỗi: {str(e)}")
+                planned_task = {
+                    "title": task["title"],
+                    "deadline": task["deadline"],
+                    "description": task["description"],
+                    "total_hours": total_hours,
+                    "hours_per_day": round(hours_per_day, 2),
+                    "days": days_until_deadline,
+                    "plan": plan,
+                    "sender": task["sender"]
+                }
+                planned_tasks.append(planned_task)
+                add_task_to_calendar(planned_task)
+                break
+            except requests.exceptions.HTTPError as e:
+                print(f"[{datetime.now()}] Lỗi HTTP khi gọi OpenRouter: {str(e)}")
+                print(f"[{datetime.now()}] Mã trạng thái: {e.response.status_code}")
+                print(f"[{datetime.now()}] Nội dung lỗi: {e.response.text}")
+                if e.response.status_code == 429:
+                    wait_time = 2 ** attempt
+                    print(f"[{datetime.now()}] Quá nhiều yêu cầu, chờ {wait_time} giây trước khi thử lại...")
+                    time.sleep(wait_time)
+                else:
+                    message_queue.put(f"Lỗi: {str(e)}. Bot vẫn chạy nhưng không lập kế hoạch chi tiết.")
+                    planned_tasks.append({
+                        "title": task["title"],
+                        "deadline": task["deadline"],
+                        "description": task["description"],
+                        "total_hours": 8,
+                        "hours_per_day": 8,
+                        "days": 1,
+                        "plan": "Không thể lập kế hoạch do lỗi API.",
+                        "sender": task["sender"]
+                    })
+                    break
+            except Exception as e:
+                print(f"[{datetime.now()}] Lỗi khác: {str(e)}")
+                message_queue.put(f"Lỗi: {str(e)}")
+                break
     return planned_tasks
 
 # Trích xuất tổng giờ
