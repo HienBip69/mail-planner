@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')  # Thay bằng key mới của bạn
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
@@ -131,7 +131,7 @@ def ai_plan_and_solve(tasks):
             f"(và tiếp tục cho đến hết số ngày)"
         )
         data = {
-            "model": "deepseek/deepseek-v3-base:free",  # Model mới
+            "model": "deepseek/deepseek-v3-base:free",  # Model miễn phí
             "messages": [{"role": "user", "content": prompt}]
         }
         max_retries = 3
