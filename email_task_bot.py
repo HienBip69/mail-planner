@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
@@ -100,7 +100,18 @@ def ai_plan_and_solve(tasks):
 
     if not OPENROUTER_API_KEY or "sk-or-v1-" not in OPENROUTER_API_KEY:
         print(f"[{datetime.now()}] Lỗi: Khóa API OpenRouter không hợp lệ hoặc chưa được cấu hình.")
-        message_queue.put("Lỗi: Khóa API OpenRouter không hợp lệ.")
+        message_queue.put("Lỗi: Khóa API OpenRouter không hợp lệ. Bot vẫn chạy nhưng không lập kế hoạch.")
+        for task in tasks:
+            planned_tasks.append({
+                "title": task["title"],
+                "deadline": task["deadline"],
+                "description": task["description"],
+                "total_hours": 8,
+                "hours_per_day": 8,
+                "days": 1,
+                "plan": "Không thể lập kế hoạch do lỗi API.",
+                "sender": task["sender"]
+            })
         return planned_tasks
 
     for task in tasks:
@@ -149,7 +160,17 @@ def ai_plan_and_solve(tasks):
             add_task_to_calendar(planned_task)
         except requests.exceptions.HTTPError as e:
             print(f"[{datetime.now()}] Lỗi HTTP khi gọi OpenRouter: {str(e)}")
-            message_queue.put(f"Lỗi: {str(e)}")
+            message_queue.put(f"Lỗi: {str(e)}. Bot vẫn chạy nhưng không lập kế hoạch chi tiết.")
+            planned_tasks.append({
+                "title": task["title"],
+                "deadline": task["deadline"],
+                "description": task["description"],
+                "total_hours": 8,
+                "hours_per_day": 8,
+                "days": 1,
+                "plan": "Không thể lập kế hoạch do lỗi API.",
+                "sender": task["sender"]
+            })
         except Exception as e:
             print(f"[{datetime.now()}] Lỗi khác: {str(e)}")
             message_queue.put(f"Lỗi: {str(e)}")
