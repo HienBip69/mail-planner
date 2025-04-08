@@ -15,7 +15,7 @@ from queue import Queue
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-TOGETHER_API_KEY = os.environ.get('TOGETHER_API_KEY', 'your-together-ai-key-here')  # Thay bằng key của bạn
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')  # Key của bạn
 
 # Biến toàn cục
 email_credentials = {"email": "", "password": ""}
@@ -89,18 +89,19 @@ def analyze_email(subject, body):
             return None
     return task if task["deadline"] else None
 
-# Gọi Together AI API với retry
+# Gọi Groq AI API với retry
 def ai_plan_and_solve(tasks):
     headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    url = "https://api.together.xyz/v1/chat/completions"  # URL của Together AI
+    url = "https://api.groq.com/openai/v1/chat/completions"  # Endpoint của Groq
     planned_tasks = []
 
-    if not TOGETHER_API_KEY or len(TOGETHER_API_KEY) < 32:  # Kiểm tra key hợp lệ
-        print(f"[{datetime.now()}] Lỗi: Khóa API Together AI không hợp lệ hoặc chưa được cấu hình.")
-        message_queue.put("Lỗi: Khóa API Together AI không hợp lệ. Bot vẫn chạy nhưng không lập kế hoạch.")
+    # Kiểm tra key trước khi gửi yêu cầu
+    if not GROQ_API_KEY or not GROQ_API_KEY.startswith("gsk_"):
+        print(f"[{datetime.now()}] Lỗi: Khóa API Groq không hợp lệ hoặc chưa được cấu hình.")
+        message_queue.put("Lỗi: Khóa API Groq không hợp lệ. Bot vẫn chạy nhưng không lập kế hoạch.")
         for task in tasks:
             planned_tasks.append({
                 "title": task["title"],
@@ -131,7 +132,7 @@ def ai_plan_and_solve(tasks):
             f"(và tiếp tục cho đến hết số ngày)"
         )
         data = {
-            "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",  # Model miễn phí
+            "model": "llama3-70b-8192",  # Model hợp lệ của Groq
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 512,
             "temperature": 0.7
@@ -139,7 +140,7 @@ def ai_plan_and_solve(tasks):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                print(f"[{datetime.now()}] Gửi yêu cầu tới Together AI: {url} (Lần thử {attempt + 1}/{max_retries})")
+                print(f"[{datetime.now()}] Gửi yêu cầu tới Groq AI: {url} (Lần thử {attempt + 1}/{max_retries})")
                 print(f"[{datetime.now()}] Đầu đề: {headers}")
                 print(f"[{datetime.now()}] Dữ liệu gửi: {data}")
                 response = requests.post(url, headers=headers, json=data, timeout=30)
@@ -165,7 +166,7 @@ def ai_plan_and_solve(tasks):
                 add_task_to_calendar(planned_task)
                 break
             except requests.exceptions.HTTPError as e:
-                print(f"[{datetime.now()}] Lỗi HTTP khi gọi Together AI: {str(e)}")
+                print(f"[{datetime.now()}] Lỗi HTTP khi gọi Groq AI: {str(e)}")
                 print(f"[{datetime.now()}] Mã trạng thái: {e.response.status_code}")
                 print(f"[{datetime.now()}] Nội dung lỗi: {e.response.text}")
                 if e.response.status_code == 429:
