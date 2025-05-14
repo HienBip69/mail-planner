@@ -12,18 +12,19 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 import pickle
 from queue import Queue
+from bs4 import BeautifulSoup
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')  # Key của bạn
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')
 
-# Biến toàn cục
 email_credentials = {"email": "", "password": ""}
 planned_tasks = []
 message_queue = Queue()
 next_check_time = None
+ignored_senders = set()
 
-# Hàm đọc email qua IMAP
+
 def get_emails(email_user, email_pass):
     tasks = []
     try:
@@ -50,17 +51,28 @@ def get_emails(email_user, email_pass):
             subject = msg["Subject"] or "Không có tiêu đề"
             body = ""
             sender = msg["From"] or "Không rõ người gửi"
+
+            if any(ignored.lower() in sender.lower() for ignored in ignored_senders):
+                print(f"[{datetime.now()}] Bỏ qua email từ {sender} do nằm trong danh sách loại trừ.")
+                continue
+
             if msg.is_multipart():
                 for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
+                    content_type = part.get_content_type()
+                    if content_type == "text/plain":
                         body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
                         break
+                    elif content_type == "text/html" and not body:
+                        html = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                        soup = BeautifulSoup(html, 'html.parser')
+                        body = soup.get_text()
             else:
                 body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
             print(f"[{datetime.now()}] Đã đọc email: Chủ đề: {subject}, Từ: {sender}")
             task = analyze_email(subject, body)
             if task:
                 task["sender"] = sender
+                task["done"] = False
                 tasks.append(task)
                 mail.store(email_id, '+FLAGS', '\\Seen')
             else:
@@ -68,26 +80,94 @@ def get_emails(email_user, email_pass):
         mail.logout()
         print(f"[{datetime.now()}] Tìm thấy {len(tasks)} email hợp lệ.")
         return tasks
+    except imaplib.IMAP4.error as e:
+        error_msg = f"Đăng nhập IMAP thất bại: {str(e)}"
+        print(f"[{datetime.now()}] {error_msg}")
+        message_queue.put(error_msg)
+        return tasks
     except Exception as e:
         error_msg = f"Lỗi khi đọc email: {str(e)}"
         print(f"[{datetime.now()}] {error_msg}")
         message_queue.put(error_msg)
         return tasks
 
-# Phân tích email
 def analyze_email(subject, body):
     task = {"title": subject, "deadline": None, "description": body}
-    deadline_match = re.search(r'due (\d{2}-\d{2}-\d{4})|due (\d{2}/\d{2}/\d{4})', body, re.IGNORECASE)
+
+    # Bước 1: Dò deadline bằng regex (dấu / hoặc -)
+    deadline_match = re.search(r'(due|hạn chót|deadline)[^\d]*(\d{2}[/-]\d{2}[/-]\d{4})', body, re.IGNORECASE)
     if deadline_match:
-        deadline = deadline_match.group(1) or deadline_match.group(2)
-        deadline = deadline.replace('/', '-')
+        deadline = deadline_match.group(2).replace('/', '-')
         try:
             datetime.strptime(deadline, "%d-%m-%Y")
             task["deadline"] = deadline
+            return task
         except ValueError:
-            print(f"[{datetime.now()}] Ngày {deadline} không hợp lệ.")
+            pass  # Nếu không hợp lệ thì tiếp tục bước 2
+
+    # Bước 2: Gửi đến Groq AI để phân tích hạn chót
+    try:
+        print(f"[{datetime.now()}] Gửi nội dung tới Groq AI để nhận diện hạn chót...")
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        prompt = (
+            f"Nội dung email như sau:\n"
+            f"Tiêu đề: {subject}\n"
+            f"Nội dung: {body}\n\n"
+            f"Hỏi: Trong nội dung trên, hạn chót của công việc là ngày nào? "
+            f"Nếu có, trả lời duy nhất bằng định dạng DD-MM-YYYY. Nếu không có thì trả lời KHÔNG CÓ."
+        )
+        data = {
+            "model": "llama3-70b-8192",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 20,
+            "temperature": 0.2
+        }
+
+        response = requests.post(url, headers=headers, json=data, timeout=20)
+        response.raise_for_status()
+        reply = response.json()["choices"][0]["message"]["content"].strip()
+        reply = reply.replace('/', '-')
+
+        print(f"[{datetime.now()}] AI trả lời hạn chót: {reply}")
+
+        if "KHÔNG CÓ" in reply.upper():
             return None
-    return task if task["deadline"] else None
+
+        try:
+            datetime.strptime(reply, "%d-%m-%Y")
+            task["deadline"] = reply
+            return task
+        except ValueError:
+            print(f"[{datetime.now()}] AI trả về ngày không hợp lệ: {reply}")
+            return None
+
+    except Exception as e:
+        print(f"[{datetime.now()}] Lỗi khi gửi AI để dò hạn chót: {str(e)}")
+        return None
+
+@app.route('/toggle_done/<int:index>', methods=['POST'])
+def toggle_done(index):
+    if 0 <= index < len(planned_tasks):
+        planned_tasks[index]['done'] = not planned_tasks[index].get('done', False)
+    return redirect(url_for('dashboard'))
+
+@app.route('/ignore_sender', methods=['POST'])
+def ignore_sender():
+    sender = request.form.get('sender')
+    if sender:
+        ignored_senders.add(sender)
+        message_queue.put(f"Đã thêm {sender} vào danh sách loại trừ.")
+    return redirect(url_for('dashboard'))
+
+@app.route('/clear_ignore', methods=['POST'])
+def clear_ignore():
+    ignored_senders.clear()
+    message_queue.put("Đã xóa tất cả email khỏi danh sách loại trừ.")
+    return redirect(url_for('dashboard'))
 
 # Gọi Groq AI API với yêu cầu trả về tiếng Việt
 def ai_plan_and_solve(tasks):
