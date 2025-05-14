@@ -271,12 +271,12 @@ def check_emails_periodically():
     while True:
         if not email_credentials["email"] or not email_credentials["password"]:
             print(f"[{datetime.now()}] Chưa đăng nhập. Đang chờ...")
-            time.sleep(15)
+            time.sleep(25)
             continue
         
         try:
             message_queue.put("Bot đang đọc email...")
-            next_check_time = time.time() + 2525  # Cập nhật chu kỳ mới
+            next_check_time = time.time() + 25  # Cập nhật chu kỳ mới
             tasks = get_emails(email_credentials["email"], email_credentials["password"])
             if tasks:
                 print(f"[{datetime.now()}] Đã tìm thấy {len(tasks)} email mới.")
@@ -290,7 +290,7 @@ def check_emails_periodically():
             message_queue.put(f"Lỗi: {str(e)}")
             print(f"[{datetime.now()}] Lỗi trong quá trình kiểm tra email: {str(e)}")
         
-        time.sleep(2525)
+        time.sleep(25)
 # Google Calendar
 def get_calendar_service():
     SCOPES = ['https://www.googleapis.com/auth/calendar']
