@@ -170,6 +170,7 @@ def clear_ignore():
     return redirect(url_for('dashboard'))
 
 # Gọi Groq AI API với yêu cầu trả về tiếng Việt
+# Gọi Groq AI API với yêu cầu trả về tiếng Việt
 def ai_plan_and_solve(tasks):
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -195,83 +196,70 @@ def ai_plan_and_solve(tasks):
         return planned_tasks
 
     for task in tasks:
-        deadline_date = datetime.strptime(task["deadline"], "%d-%m-%Y")
-        days_until_deadline = max((deadline_date - datetime.now()).days, 1)
+        try:
+            deadline_date = datetime.strptime(task['deadline'], "%d-%m-%Y")
+            today = datetime.today()
+            days_until_deadline = max((deadline_date - today).days, 1)
 
-        # Prompt yêu cầu trả về tiếng Việt
-        prompt = (
-            f"Tạo kế hoạch chi tiết cho nhiệm vụ này bằng tiếng Việt:\n"
-            f"Tiêu đề: {task['title']}\n"
-            f"Mô tả: {task['description']}\n"
-            f"Hạn chót: {task['deadline']} (định dạng DD-MM-YYYY)\n"
-            f"Ước lượng tổng thời gian hoàn thành (giờ) và lập kế hoạch chi tiết phân bổ công việc cụ thể cho từng ngày trong {days_until_deadline} ngày. "
-            f"Trả về định dạng bằng tiếng Việt:\n"
-            f"- Tổng thời gian: X giờ\n"
-            f"- Ngày 1: Y giờ - Công việc cụ thể\n"
-            f"- Ngày 2: Z giờ - Công việc cụ thể\n"
-            f"(và tiếp tục cho đến hết số ngày)"
-        )
-        data = {
-            "model": "llama3-70b-8192",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 512,
-            "temperature": 0.7
-        }
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                print(f"[{datetime.now()}] Gửi yêu cầu tới Groq AI: {url} (Lần thử {attempt + 1}/{max_retries})")
-                print(f"[{datetime.now()}] Đầu đề: {headers}")
-                print(f"[{datetime.now()}] Dữ liệu gửi: {data}")
-                response = requests.post(url, headers=headers, json=data, timeout=30)
-                response.raise_for_status()
-                plan = response.json()["choices"][0]["message"]["content"]
-                print(f"[{datetime.now()}] Nhận phản hồi: {plan[:50]}...")
-                print(f"[{datetime.now()}] Phản hồi đầy đủ: {plan}")
+            prompt = (
+                f"Tạo kế hoạch chi tiết cho nhiệm vụ này bằng tiếng Việt:\n"
+                f"Tiêu đề: {task['title']}\n"
+                f"Mô tả: {task['description']}\n"
+                f"Hạn chót: {task['deadline']} (định dạng DD-MM-YYYY)\n"
+                f"Ước lượng tổng thời gian hoàn thành (giờ) và lập kế hoạch chi tiết phân bổ công việc cụ thể cho từng ngày trong {days_until_deadline} ngày. "
+                f"Trả về định dạng bằng tiếng Việt:\n"
+                f"- Tổng thời gian: X giờ\n"
+                f"- Ngày 1: Y giờ - Công việc cụ thể\n"
+                f"- Ngày 2: Z giờ - Công việc cụ thể\n"
+                f"(và tiếp tục cho đến hết số ngày)"
+            )
 
-                total_hours = extract_total_hours(plan) or 8
-                hours_per_day = total_hours / days_until_deadline
+            data = {
+                "model": "llama3-70b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 512,
+                "temperature": 0.7
+            }
 
-                planned_task = {
-                    "title": task["title"],
-                    "deadline": task["deadline"],
-                    "description": task["description"],
-                    "total_hours": total_hours,
-                    "hours_per_day": round(hours_per_day, 2),
-                    "days": days_until_deadline,
-                    "plan": plan,
-                    "sender": task["sender"]
-                }
-                planned_tasks.append(planned_task)
-                add_task_to_calendar(planned_task)
-                break
-            except requests.exceptions.HTTPError as e:
-                print(f"[{datetime.now()}] Lỗi HTTP khi gọi Groq AI: {str(e)}")
-                print(f"[{datetime.now()}] Mã trạng thái: {e.response.status_code}")
-                print(f"[{datetime.now()}] Nội dung lỗi: {e.response.text}")
-                if e.response.status_code == 429:
-                    wait_time = 2 ** attempt
-                    print(f"[{datetime.now()}] Quá nhiều yêu cầu, chờ {wait_time} giây trước khi thử lại...")
-                    time.sleep(wait_time)
-                else:
-                    message_queue.put(f"Lỗi: {str(e)}. Bot vẫn chạy nhưng không lập kế hoạch chi tiết.")
-                    planned_tasks.append({
-                        "title": task["title"],
-                        "deadline": task["deadline"],
-                        "description": task["description"],
-                        "total_hours": 8,
-                        "hours_per_day": 8,
-                        "days": 1,
-                        "plan": "Không thể lập kế hoạch do lỗi API.",
-                        "sender": task["sender"]
-                    })
-                    break
-            except Exception as e:
-                print(f"[{datetime.now()}] Lỗi khác: {str(e)}")
-                message_queue.put(f"Lỗi: {str(e)}")
-                break
+            print(f"[{datetime.now()}] Gửi yêu cầu tới Groq AI: {task['title']}")
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            response.raise_for_status()
+
+            plan = response.json()["choices"][0]["message"]["content"]
+            print(f"[{datetime.now()}] Phản hồi từ Groq AI: {plan[:60]}...")
+
+            total_hours = extract_total_hours(plan) or 8
+            hours_per_day = round(total_hours / days_until_deadline, 2)
+
+            planned_task = {
+                "title": task["title"],
+                "deadline": task["deadline"],
+                "description": task["description"],
+                "total_hours": total_hours,
+                "hours_per_day": hours_per_day,
+                "days": days_until_deadline,
+                "plan": plan,
+                "sender": task["sender"]
+            }
+
+            planned_tasks.append(planned_task)
+            add_task_to_calendar(planned_task)
+
+        except Exception as e:
+            print(f"[{datetime.now()}] Lỗi khi xử lý task '{task['title']}': {str(e)}")
+            message_queue.put(f"Lỗi khi lập kế hoạch: {str(e)}")
+            planned_tasks.append({
+                "title": task["title"],
+                "deadline": task["deadline"],
+                "description": task["description"],
+                "total_hours": 8,
+                "hours_per_day": 8,
+                "days": 1,
+                "plan": "Không thể lập kế hoạch do lỗi xử lý.",
+                "sender": task["sender"]
+            })
+
     return planned_tasks
-
 # Trích xuất tổng giờ
 def extract_total_hours(plan):
     match = re.search(r'tổng thời gian.*?(\d+\.?\d*) giờ', plan, re.IGNORECASE)
@@ -283,12 +271,12 @@ def check_emails_periodically():
     while True:
         if not email_credentials["email"] or not email_credentials["password"]:
             print(f"[{datetime.now()}] Chưa đăng nhập. Đang chờ...")
-            time.sleep(60)
+            time.sleep(15)
             continue
         
         try:
             message_queue.put("Bot đang đọc email...")
-            next_check_time = time.time() + 60
+            next_check_time = time.time() + 2525  # Cập nhật chu kỳ mới
             tasks = get_emails(email_credentials["email"], email_credentials["password"])
             if tasks:
                 print(f"[{datetime.now()}] Đã tìm thấy {len(tasks)} email mới.")
@@ -302,30 +290,47 @@ def check_emails_periodically():
             message_queue.put(f"Lỗi: {str(e)}")
             print(f"[{datetime.now()}] Lỗi trong quá trình kiểm tra email: {str(e)}")
         
-        time.sleep(60)
-
+        time.sleep(2525)
 # Google Calendar
 def get_calendar_service():
+    SCOPES = ['https://www.googleapis.com/auth/calendar']
     try:
         creds = None
-        if os.path.exists('token.pickle'):
-            with open('token.pickle', 'rb') as token:
-                creds = pickle.load(token)
+        token_path = 'token.pickle'
+        credentials_path = 'credentials.json'
+
+        # ⚠️ Nếu không có credentials.json thì không thể xác thực OAuth
+        if not os.path.exists(credentials_path):
+            print("❌ Không tìm thấy file 'credentials.json'. Bạn cần tải nó từ Google Cloud Console.")
+            return None
+
+        # 🧾 Nếu đã có token
+        if os.path.exists(token_path):
+            with open(token_path, 'rb') as token_file:
+                creds = pickle.load(token_file)
+
+        # 🔄 Nếu token hết hạn hoặc chưa có
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                print("🔁 Token hết hạn, đang làm mới...")
                 creds.refresh(Request())
             else:
-                if not os.path.exists('credentials.json'):
-                    print(f"[{datetime.now()}] Thông báo: Không tìm thấy file credentials.json. Bỏ qua Google Calendar.")
-                    return None
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', ['https://www.googleapis.com/auth/calendar'])
+                print("🔐 Cần xác thực OAuth mới. Trình duyệt sẽ mở.")
+                flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
                 creds = flow.run_local_server(port=0)
-                with open('token.pickle', 'wb') as token:
-                    pickle.dump(creds, token)
+
+            # 💾 Lưu lại token
+            with open(token_path, 'wb') as token_file:
+                pickle.dump(creds, token_file)
+                print("✅ Token mới đã được lưu vào token.pickle")
+
+        # Trả về dịch vụ calendar
         return build('calendar', 'v3', credentials=creds)
+
     except Exception as e:
-        print(f"[{datetime.now()}] Lỗi khi khởi tạo Google Calendar: {str(e)}")
+        print(f"❗ Lỗi khi khởi tạo Google Calendar API: {e}")
         return None
+
 
 def add_task_to_calendar(task):
     service = get_calendar_service()
@@ -368,9 +373,10 @@ def stream():
             if next_check_time:
                 remaining_seconds = int(next_check_time - time.time())
                 if remaining_seconds >= 0:
-                    yield f"data: {{ \"countdown\": {remaining_seconds} }}\n\n"
-            time.sleep(1)
+                    yield f'data: {{"countdown": {remaining_seconds}}}\n\n'
+            time.sleep(1)  # tránh vòng lặp chạy quá nhanh
     return Response(event_stream(), mimetype="text/event-stream")
+
 
 @app.route('/')
 def index():
