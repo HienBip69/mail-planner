@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
     <meta charset="UTF-8">
     <title>Bảng điều khiển kế hoạch</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- ✅ Đảm bảo responsive -->
@@ -43,43 +47,68 @@
     </div>
 
     <!-- 🔍 Tìm kiếm & lọc -->
-    <div class="mb-3 row g-2">
-        <div class="col-md-8">
+    <div class="mb-3 row g-2 align-items-center">
+        <div class="col-md-5">
             <input type="text" class="form-control" id="searchBox" placeholder="🔍 Tìm theo tiêu đề...">
         </div>
-        <div class="col-md-4 d-flex align-items-center">
+        <div class="col-md-3 d-flex align-items-center">
             <input class="form-check-input me-2" type="checkbox" id="hideDone" checked>
             <label class="form-check-label" for="hideDone">Chỉ hiển thị chưa hoàn thành</label>
+        </div>
+        <div class="col-md-4">
+            <select id="filterStatus" class="form-select" aria-label="Lọc trạng thái task">
+                <option value="all" selected>Tất cả trạng thái</option>
+                <option value="done">Đã hoàn thành</option>
+                <option value="notdone">Chưa hoàn thành</option>
+            </select>
         </div>
     </div>
 
     <!-- 🔔 Log -->
     <div id="log" class="mb-4 text-muted small"></div>
 
-    {% if plans %}
-        <div id="taskList">
-            {% for task in plans %}
-                <div class="card mb-3 shadow-sm task-item {% if task.done %}done-task{% endif %}" 
-                     data-title="{{ task.title|lower }}" data-done="{{ '1' if task.done else '0' }}">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ task.title }}</h5>
-                        <p><strong>Hạn chót:</strong> {{ task.deadline }}</p>
-                        <p><strong>Tổng thời gian:</strong> {{ task.total_hours }} giờ, 
-                           <strong>Mỗi ngày:</strong> {{ task.hours_per_day }} giờ</p>
-                        <p><strong>Mô tả:</strong> {{ task.description }}</p>
-                        <hr>
-                        <pre>{{ task.plan }}</pre>
-                        <form action="{{ url_for('toggle_done', index=loop.index0) }}" method="post" class="mt-2">
-                            <button type="submit" class="btn btn-sm {{ 'btn-secondary' if task.done else 'btn-success' }}">
-                                {{ '✅ Đã hoàn thành' if task.done else 'Đánh dấu hoàn thành' }}
-                            </button>
-                        </form>
-                    </div>
-                </div>
+    <!-- ✋ Danh sách email bị loại trừ (Ignore Senders) -->
+    {% if ignore_senders %}
+    <div class="mb-4">
+        <h5>Danh sách email bị loại trừ (Ignore Senders):</h5>
+        <ul class="list-group">
+            {% for email in ignore_senders %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ email }}
+                <form action="{{ url_for('remove_ignore_sender') }}" method="post" class="mb-0">
+                    <input type="hidden" name="email" value="{{ email }}">
+                    <button type="submit" class="btn btn-sm btn-danger">Xóa</button>
+                </form>
+            </li>
             {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if plans %}
+    <div id="taskList">
+        {% for task in plans %}
+        <div class="card mb-3 shadow-sm task-item {% if task.done %}done-task{% endif %}" 
+             data-title="{{ task.title|lower }}" data-done="{{ '1' if task.done else '0' }}">
+            <div class="card-body">
+                <h5 class="card-title">{{ task.title }}</h5>
+                <p><strong>Hạn chót:</strong> {{ task.deadline }}</p>
+                <p><strong>Tổng thời gian:</strong> {{ task.total_hours }} giờ, 
+                   <strong>Mỗi ngày:</strong> {{ task.hours_per_day }} giờ</p>
+                <p><strong>Mô tả:</strong> {{ task.description }}</p>
+                <hr>
+                <pre>{{ task.plan }}</pre>
+                <form action="{{ url_for('toggle_done', index=loop.index0) }}" method="post" class="mt-2">
+                    <button type="submit" class="btn btn-sm {{ 'btn-secondary' if task.done else 'btn-success' }}">
+                        {{ '✅ Đã hoàn thành' if task.done else 'Đánh dấu hoàn thành' }}
+                    </button>
+                </form>
+            </div>
         </div>
+        {% endfor %}
+    </div>
     {% else %}
-        <p class="text-center text-muted">📝 Chưa có kế hoạch nào được lập.</p>
+    <p class="text-center text-muted">📝 Chưa có kế hoạch nào được lập.</p>
     {% endif %}
 </div>
 
@@ -102,10 +131,12 @@
 
     const searchBox = document.getElementById("searchBox");
     const hideDone = document.getElementById("hideDone");
+    const filterStatus = document.getElementById("filterStatus");
 
     function filterTasks() {
         const keyword = searchBox.value.toLowerCase();
         const hideDoneChecked = hideDone.checked;
+        const statusFilter = filterStatus.value;
 
         document.querySelectorAll(".task-item").forEach(task => {
             const title = task.getAttribute("data-title");
@@ -114,12 +145,17 @@
             const matchTitle = title.includes(keyword);
             const matchDone = !hideDoneChecked || !isDone;
 
-            task.style.display = (matchTitle && matchDone) ? "" : "none";
+            let matchStatus = true;
+            if (statusFilter === 'done') matchStatus = isDone;
+            else if (statusFilter === 'notdone') matchStatus = !isDone;
+
+            task.style.display = (matchTitle && matchDone && matchStatus) ? "" : "none";
         });
     }
 
     searchBox.addEventListener("input", filterTasks);
     hideDone.addEventListener("change", filterTasks);
+    filterStatus.addEventListener("change", filterTasks);
 </script>
 </body>
 </html>
