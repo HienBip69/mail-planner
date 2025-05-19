@@ -13,6 +13,7 @@ from google.auth.transport.requests import Request
 import pickle
 from queue import Queue
 from bs4 import BeautifulSoup
+from flask import send_from_directory
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('SECRET_KEY', 'mysecretkey123')
@@ -210,10 +211,9 @@ def stream():
                         yield f"data: {{\"countdown\": {remaining}}}\n\n"
             time.sleep(1)
     return Response(event_stream(), mimetype='text/event-stream')
-
 @app.route('/firebase-messaging-sw.js')
 def service_worker():
-    return send_from_directory('.', 'firebase-messaging-sw.js')
+    return send_from_directory('.', 'firebase-messaging-sw.js', mimetype='application/javascript')
 
 # ------------------------------ MAIN ------------------------------ #
 if __name__ == "__main__":
