@@ -1,6 +1,8 @@
-flask==2.0.1
-requests==2.26.0
-google-auth-oauthlib==0.4.6
-google-api-python-client==2.52.0
-beautifulsoup4==4.10.0
-firebase-admin==5.2.0
+Flask==2.2.5
+Werkzeug==2.2.3
+firebase-admin==6.4.0
+requests
+google-auth
+google-auth-oauthlib
+google-api-python-client
+beautifulsoup4
