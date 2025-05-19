@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Đăng nhập - AI Planner</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+        .login-container {
+            background-color: white;
+            padding: 40px 50px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            width: 320px;
+            text-align: center;
+        }
+        h2 {
+            margin-bottom: 30px;
+            color: #4b0082;
+        }
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            margin: 10px 0 20px 0;
+            border: 1.5px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        button {
+            background-color: #667eea;
+            color: white;
+            padding: 12px;
+            border: none;
+            width: 100%;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #5563c1;
+        }
+        .error-message {
+            color: #d9534f;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        @media (max-width: 400px) {
+            .login-container {
+                width: 90%;
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>Đăng nhập AI Planner</h2>
+        {% if error %}
+            <div class="error-message">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/">
+            <input type="email" name="email" placeholder="Email" required />
+            <input type="password" name="password" placeholder="Mật khẩu(appppassword)" required />
+            <button type="submit">Đăng nhập</button>
+        </form>
+    </div>
+</body>
+    <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-messaging-compat.js"></script>
+    <script>
+  // 🔐 Thông tin cấu hình Firebase thật của bạn
+  const firebaseConfig = {
+    apiKey: "AIzaSyAkXj09Qh9vvb0_JVjr_b_jF3QD3eGV5Dw",
+    authDomain: "ai-planner-d9808.firebaseapp.com",
+    projectId: "ai-planner-d9808",
+    storageBucket: "ai-planner-d9808.appspot.com",
+    messagingSenderId: "901247348661",
+    appId: "1:901247348661:web:2c084fe5bf35638f9073fc"
+  };
+
+  // ✅ Khởi tạo Firebase
+  firebase.initializeApp(firebaseConfig);
+  const messaging = firebase.messaging();
+
+  // 🌐 Nhận FCM Token để gửi thông báo
+  messaging.getToken({
+    vapidKey: "BNbZTnwImyNwZr0JVwFGTC5IYmUy-vfo27ca9hynymcy3AbDU8Wl2LcFuUz-DgzmzXscElXZ0RbKVMT_NT1pgy8"
+  }).then((currentToken) => {
+    if (currentToken) {
+      console.log("🔑 FCM Token:", currentToken);
+      // TODO: Gửi token về Flask server nếu bạn muốn lưu trữ
+    } else {
+      console.warn("⚠️ Không lấy được token. Yêu cầu người dùng cấp quyền.");
+    }
+  }).catch((err) => {
+    console.error("❌ Lỗi khi lấy token:", err);
+  });
+  // 🔔 Khi nhận tin nhắn ngay khi đang dùng web
+  messaging.onMessage((payload) => {
+    console.log("📩 Tin nhắn đến:", payload);
+    alert(payload.notification.title + "\n" + payload.notification.body);
+  });
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/firebase-messaging-sw.js')
+      .then(function(registration) {
+        console.log('✅ Service Worker đăng ký thành công:', registration);
+      })
+      .catch(function(err) {
+        console.log('❌ Service Worker đăng ký thất bại:', err);
+      });
+  }
+</script>
+</html>
