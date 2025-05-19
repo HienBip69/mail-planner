@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="apple-touch-icon-precomposed" href="{{ url_for('static', filename='icons/apple-touch-icon-precomposed.png') }}">
     <link rel="manifest" href="/static/manifest.json">
-    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0f172a">
     <meta charset="UTF-8">
     <title>Bảng điều khiển kế hoạch</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- ✅ Đảm bảo responsive -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .done-task {
             opacity: 0.5;
             text-decoration: line-through;
         }
-
-        /* ✅ Responsive font và nút cho mobile */
         @media (max-width: 768px) {
             .card-body {
                 font-size: 1rem;
@@ -37,16 +37,15 @@
 </head>
 <body class="bg-white">
 <div class="container mt-4 mb-5">
+    <div class="text-end mb-2">
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-sm">🚪 Đăng xuất</a>
+    </div>
     <h2 class="mb-3 text-center">📅 Kế hoạch từ Email</h2>
-
-    <!-- ⏳ Countdown -->
     <div class="mb-3 text-center">
         <h6 class="text-primary">
             ⏳ Lần kiểm tra email tiếp theo trong <span id="countdown" class="fw-bold">...</span> giây.
         </h6>
     </div>
-
-    <!-- 🔍 Tìm kiếm & lọc -->
     <div class="mb-3 row g-2 align-items-center">
         <div class="col-md-5">
             <input type="text" class="form-control" id="searchBox" placeholder="🔍 Tìm theo tiêu đề...">
@@ -63,16 +62,12 @@
             </select>
         </div>
     </div>
-
-    <!-- 🔔 Log -->
     <div id="log" class="mb-4 text-muted small"></div>
-
-    <!-- ✋ Danh sách email bị loại trừ (Ignore Senders) -->
-    {% if ignore_senders %}
+    {% if ignored_senders %}
     <div class="mb-4">
         <h5>Danh sách email bị loại trừ (Ignore Senders):</h5>
         <ul class="list-group">
-            {% for email in ignore_senders %}
+            {% for email in ignored_senders %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
                 {{ email }}
                 <form action="{{ url_for('remove_ignore_sender') }}" method="post" class="mb-0">
@@ -85,9 +80,9 @@
     </div>
     {% endif %}
 
-    {% if plans %}
+    {% if tasks %}
     <div id="taskList">
-        {% for task in plans %}
+        {% for task in tasks %}
         <div class="card mb-3 shadow-sm task-item {% if task.done %}done-task{% endif %}" 
              data-title="{{ task.title|lower }}" data-done="{{ '1' if task.done else '0' }}">
             <div class="card-body">
@@ -111,8 +106,6 @@
     <p class="text-center text-muted">📝 Chưa có kế hoạch nào được lập.</p>
     {% endif %}
 </div>
-
-<!-- ✅ JavaScript -->
 <script>
     const evtSource = new EventSource("/stream");
     evtSource.onmessage = function(event) {
@@ -128,31 +121,24 @@
             document.getElementById("countdown").textContent = seconds >= 0 ? seconds : "Đang xử lý";
         }
     };
-
     const searchBox = document.getElementById("searchBox");
     const hideDone = document.getElementById("hideDone");
     const filterStatus = document.getElementById("filterStatus");
-
     function filterTasks() {
         const keyword = searchBox.value.toLowerCase();
         const hideDoneChecked = hideDone.checked;
         const statusFilter = filterStatus.value;
-
         document.querySelectorAll(".task-item").forEach(task => {
             const title = task.getAttribute("data-title");
             const isDone = task.getAttribute("data-done") === "1";
-
             const matchTitle = title.includes(keyword);
             const matchDone = !hideDoneChecked || !isDone;
-
             let matchStatus = true;
             if (statusFilter === 'done') matchStatus = isDone;
             else if (statusFilter === 'notdone') matchStatus = !isDone;
-
             task.style.display = (matchTitle && matchDone && matchStatus) ? "" : "none";
         });
     }
-
     searchBox.addEventListener("input", filterTasks);
     hideDone.addEventListener("change", filterTasks);
     filterStatus.addEventListener("change", filterTasks);
