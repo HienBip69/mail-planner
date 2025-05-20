@@ -37,7 +37,7 @@ fcm_tokens = set()
 user_fcm_token = None
 firebase_initialized = False
 
-# ---------------- FIREBASE ADMIN INIT ------------------
+# ---------------- FIREBASE ADMIN INIT ------------------ #
 cred_path = os.environ.get('FIREBASE_CRED', 'firebase-adminsdk.json')
 try:
     if not os.path.exists(cred_path):
@@ -54,21 +54,7 @@ except Exception as e:
     logger.error(f"Lỗi khởi tạo Firebase: {str(e)}")
     firebase_initialized = False
 
-# Khôi phục FCM tokens từ tệp
-try:
-    if os.path.exists("fcm_tokens.txt"):
-        with open("fcm_tokens.txt", "r") as f:
-            for line in f:
-                token = line.strip()
-                if token:
-                    fcm_tokens.add(token)
-                    if not user_fcm_token:
-                        user_fcm_token = token
-        logger.info(f"Đã khôi phục {len(fcm_tokens)} token FCM từ fcm_tokens.txt")
-except Exception as e:
-    logger.error(f"Lỗi khi khôi phục token FCM: {str(e)}")
-
-# ---------------- SEND NOTIFICATION ------------------
+# ---------------- SEND NOTIFICATION ------------------ #
 def send_notification(title, body, token):
     if not firebase_initialized:
         logger.warning(f"Không thể gửi thông báo '{title}': Firebase chưa được khởi tạo")
@@ -91,53 +77,41 @@ def send_notification(title, body, token):
         logger.error(f"Lỗi gửi thông báo '{title}': {str(e)}")
         return False
 
-@app.route("/save_token", methods=["POST"])
-def save_token():
-    global user_fcm_token
-    data = request.get_json()
-    token = data.get("token")
+@app.route("/register_token", methods=["POST"])
+def register_token():
+    token = request.json.get("token")
     if token:
-        user_fcm_token = token
-        fcm_tokens.add(token)
-        with open("fcm_tokens.txt", "a") as f:
-            f.write(token + "\n")
-        logger.info(f"Token FCM nhận được và lưu vào fcm_tokens.txt: {token}")
-        return jsonify({"status": "ok"}), 200
-    logger.warning("Yêu cầu lưu token thất bại: Thiếu token")
+        with open("fcm_token.txt", "w") as f:
+            f.write(token)
+        logger.info("Token FCM đã được lưu: fcm_token.txt")
+        return jsonify({"status": "ok"})
+    logger.warning("Yêu cầu đăng ký token thất bại: Thiếu token")
     return jsonify({"status": "missing token"}), 400
 
-# ---------------- GOOGLE CALENDAR SETUP ------------------
+# ---------------- GOOGLE CALENDAR SETUP ------------------ #
 def get_calendar_service():
     global creds
-    token_path = os.environ.get('TOKEN_PATH', 'token.pickle')
-    try:
-        if os.path.exists(token_path):
-            with open(token_path, 'rb') as token:
-                creds = pickle.load(token)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(Request())
-                    with open(token_path, 'wb') as token:
-                        pickle.dump(creds, token)
-                    logger.info("Token đã được làm mới thành công")
-                except Exception as e:
-                    logger.error(f"Không thể làm mới token: {str(e)}")
-                    return None
-            else:
-                logger.warning("Không có token hợp lệ, cần xác thực thủ công trên môi trường local")
-                return None
-        return build('calendar', 'v3', credentials=creds)
-    except Exception as e:
-        logger.error(f"Lỗi khởi tạo Google Calendar service: {str(e)}")
-        return None
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_console()
+                'credentials.json', SCOPES
+            )
+            creds = flow.run_local_server(port=0, open_browser=False)  # Sửa ở đây
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+    return build('calendar', 'v3', credentials=creds)
 
+    
 def add_to_calendar(task):
     try:
         service = get_calendar_service()
-        if not service:
-            logger.warning(f"Bỏ qua thêm sự kiện '{task['title']}': Không có dịch vụ Google Calendar")
-            return
         deadline = datetime.strptime(task['deadline'], "%d-%m-%Y")
         event = {
             'summary': task['title'],
@@ -150,7 +124,7 @@ def add_to_calendar(task):
     except Exception as e:
         logger.error(f"Lỗi thêm sự kiện vào Google Calendar: {str(e)}")
 
-# ---------------- EMAIL PROCESSING ------------------
+# ---------------- EMAIL PROCESSING ------------------ #
 def decode_mime_words(s):
     if not s:
         return ""
@@ -166,6 +140,7 @@ def analyze_email(subject, body):
         logger.warning(f"Nội dung email không hợp lệ hoặc rỗng: {subject}")
         return None
 
+    # Tìm hạn chót bằng biểu thức chính quy
     pattern = r'(?:due|hạn chót|deadline)[^\d]*(\d{2}[/-]\d{2}[/-]\d{4})'
     deadline_match = re.search(pattern, body, re.IGNORECASE)
     if deadline_match:
@@ -178,6 +153,7 @@ def analyze_email(subject, body):
         except ValueError:
             logger.warning(f"Ngày không hợp lệ: {deadline} trong email: {subject}")
 
+    # Nếu không tìm thấy bằng regex, dùng Groq AI
     try:
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -257,6 +233,19 @@ def ai_plan_and_solve(tasks):
             planned.append(task)
     return planned
 
+@app.route("/save_token", methods=["POST"])
+def save_token():
+    global user_fcm_token
+    data = request.get_json()
+    token = data.get("token")
+    if token:
+        user_fcm_token = token
+        fcm_tokens.add(token)
+        logger.info(f"Token FCM nhận được: {token}")
+        return jsonify({"status": "ok"}), 200
+    logger.warning("Yêu cầu lưu token thất bại: Thiếu token")
+    return jsonify({"status": "missing token"}), 400
+
 def get_emails(email_user, email_pass):
     tasks = []
     try:
@@ -333,7 +322,7 @@ def get_emails(email_user, email_pass):
         message_queue.put(error_msg)
         return tasks
 
-# ------------------------------ ROUTES ------------------------------
+# ------------------------------ ROUTES ------------------------------ #
 def email_check_thread():
     global planned_tasks, next_check_time
     while True:
